@@ -1,5 +1,8 @@
 from builtins import str
 
+import flask_admin_subview
+from flask_admin_subview import SubviewContainerMixin, SubviewEntry
+
 import logging
 from operator import itemgetter
 import datetime
@@ -848,6 +851,41 @@ class MemberView(MyModelView):
             model.profile_pic_url = tmp.file_path
 
 
+class ContentModelSubview(flask_admin_subview.View, ModelView):
+    column_list = (
+        "meeting.title",
+        "meeting.date",
+        "meeting",
+        "attendance",
+        "alternate_member",
+    )
+    column_labels = {
+        "meeting.title": "Committee name",
+        "meeting.date": "Meeting date",
+        "meeting": "Meeting title",
+    }
+    column_filters = ["meeting.title", "meeting.date"]
+
+    def get_query(self):
+        return self._extend_query(super(ContentModelSubview, self).get_query())
+
+    def get_count_query(self):
+        return self._extend_query(super(ContentModelSubview, self).get_count_query())
+
+    def _extend_query(self, query):
+        member_id = request.args.get("id")
+        if member_id is None:
+            abort(400, "Container id required")
+        return query.filter(CommitteeMeetingAttendance.member_id == member_id)
+
+
+class ContainerView(SubviewContainerMixin, ModelView):
+    subviews = (
+        # specify that we need to pass id from the location URL to the subview
+        SubviewEntry("/admin/member_subview/", "Member Subview", "id"),
+    )
+
+
 class CommitteeQuestionView(MyModelView):
     list_template = "admin/committee_question_list.html"
     create_template = "admin/committee_question_create.html"
@@ -1584,6 +1622,15 @@ admin.add_view(
 # ---------------------------------------------------------------------------------
 # Members
 admin.add_view(MemberView(Member, db.session, name="Members", endpoint="member"))
+admin.add_view(
+    ContentModelSubview(
+        CommitteeMeetingAttendance,
+        db.session,
+        "CommitteeMeetingAttendance",
+        endpoint="member_subview",
+    )
+)
+
 
 # ---------------------------------------------------------------------------------
 # Reports
